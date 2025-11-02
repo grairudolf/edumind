@@ -9,7 +9,6 @@ import {
   IconButton,
   Avatar,
   Chip,
-  Fab,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -19,18 +18,20 @@ import {
   Select,
   MenuItem,
   Alert,
+  Fade,
+  Slide,
+  Grow,
 } from '@mui/material';
 import {
   Send,
   Mic,
   MicOff,
-  VolumeUp,
-  VolumeOff,
   Add,
-  Close,
+  SmartToy,
+  School,
 } from '@mui/icons-material';
 import { useChat } from '../contexts/ChatContext';
-import { useAuth } from '../contexts/AuthContext';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 interface Message {
   id: number;
@@ -45,15 +46,13 @@ interface Message {
 }
 
 const ChatPage: React.FC = () => {
-  const { user } = useAuth();
-  const {
+    const {
     currentSession,
     messages,
     isConnected,
     isTyping,
     sendMessage,
     createSession,
-    loadSession,
     endSession,
   } = useChat();
 
@@ -66,6 +65,7 @@ const ChatPage: React.FC = () => {
     difficulty_level: 'beginner',
     language: 'en',
   });
+  const [isLoading, setIsLoading] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -108,10 +108,17 @@ const ChatPage: React.FC = () => {
   }, []);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || isLoading) return;
 
-    await sendMessage(newMessage, 'text', newSessionData.language);
-    setNewMessage('');
+    setIsLoading(true);
+    try {
+      await sendMessage(newMessage, 'text', newSessionData.language);
+      setNewMessage('');
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -142,14 +149,21 @@ const ChatPage: React.FC = () => {
       return;
     }
 
-    await createSession(newSessionData);
-    setShowNewSessionDialog(false);
-    setNewSessionData({
-      title: '',
-      subject: '',
-      difficulty_level: 'beginner',
-      language: 'en',
-    });
+    setIsLoading(true);
+    try {
+      await createSession(newSessionData);
+      setShowNewSessionDialog(false);
+      setNewSessionData({
+        title: '',
+        subject: '',
+        difficulty_level: 'beginner',
+        language: 'en',
+      });
+    } catch (error) {
+      console.error('Failed to create session:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const formatTime = (timestamp: string) => {
@@ -174,49 +188,53 @@ const ChatPage: React.FC = () => {
     <Container maxWidth="lg">
       <Box sx={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
         {/* Chat Header */}
-        <Paper elevation={1} sx={{ p: 2, mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Box>
-            <Typography variant="h6">
-              {currentSession ? currentSession.title : 'Chat with EduMind'}
-            </Typography>
-            {currentSession && (
-              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                <Chip label={currentSession.subject || 'General'} size="small" />
-                <Chip label={currentSession.difficulty_level} size="small" variant="outlined" />
-                <Chip label={currentSession.language.toUpperCase()} size="small" variant="outlined" />
-              </Box>
-            )}
-          </Box>
+        <Slide direction="down" in mountOnEnter unmountOnExit>
+          <Paper elevation={1} sx={{ p: 2, mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+              <Typography variant="h6">
+                {currentSession ? currentSession.title : 'Chat with EduMind'}
+              </Typography>
+              {currentSession && (
+                <Grow in timeout={500}>
+                  <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                    <Chip label={currentSession.subject || 'General'} size="small" icon={<School />} />
+                    <Chip label={currentSession.difficulty_level} size="small" variant="outlined" />
+                    <Chip label={currentSession.language.toUpperCase()} size="small" variant="outlined" />
+                  </Box>
+                </Grow>
+              )}
+            </Box>
 
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            {!currentSession && (
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={() => setShowNewSessionDialog(true)}
-              >
-                New Session
-              </Button>
-            )}
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              {!currentSession && (
+                <Button
+                  variant="contained"
+                  startIcon={<Add />}
+                  onClick={() => setShowNewSessionDialog(true)}
+                >
+                  New Session
+                </Button>
+              )}
 
-            {currentSession && (
-              <Button
-                variant="outlined"
-                color="error"
-                onClick={endSession}
-              >
-                End Session
-              </Button>
-            )}
-          </Box>
-        </Paper>
+              {currentSession && (
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={endSession}
+                >
+                  End Session
+                </Button>
+              )}
+            </Box>
+          </Paper>
+        </Slide>
 
         {/* Connection Status */}
-        {!isConnected && (
+        <Fade in={!isConnected}>
           <Alert severity="warning" sx={{ mb: 2 }}>
             Not connected to chat server. Messages may not be delivered in real-time.
           </Alert>
-        )}
+        </Fade>
 
         {/* Messages Area */}
         <Paper
@@ -232,99 +250,104 @@ const ChatPage: React.FC = () => {
           }}
         >
           {messages.length === 0 && !currentSession && (
-            <Box sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              textAlign: 'center',
-            }}>
-              <Typography variant="h6" color="textSecondary" gutterBottom>
-                Start a conversation with EduMind
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Ask questions about any subject and get personalized help!
-              </Typography>
-              <Button
-                variant="contained"
-                sx={{ mt: 2 }}
-                onClick={() => setShowNewSessionDialog(true)}
-              >
-                Start New Session
-              </Button>
-            </Box>
+            <Fade in>
+              <Box sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                textAlign: 'center',
+              }}>
+                <SmartToy sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+                <Typography variant="h6" color="textSecondary" gutterBottom>
+                  Start a conversation with EduMind
+                </Typography>
+                <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+                  Ask questions about any subject and get personalized help!
+                </Typography>
+                <Button
+                  variant="contained"
+                  sx={{ mt: 2 }}
+                  onClick={() => setShowNewSessionDialog(true)}
+                >
+                  Start New Session
+                </Button>
+              </Box>
+            </Fade>
           )}
 
-          {messages.map((message: Message) => (
-            <Box
-              key={message.id}
-              sx={{
-                display: 'flex',
-                justifyContent: message.is_user ? 'flex-end' : 'flex-start',
-                mb: 1,
-              }}
-            >
+          {messages.map((message: Message, index: number) => (
+            <Slide key={message.id} direction={message.is_user ? 'left' : 'right'} in mountOnEnter>
               <Box
-                className={`chat-message ${message.is_user ? 'user' : 'bot'}`}
                 sx={{
-                  maxWidth: '70%',
-                  position: 'relative',
+                  display: 'flex',
+                  justifyContent: message.is_user ? 'flex-end' : 'flex-start',
+                  mb: 1,
                 }}
               >
-                {!message.is_user && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <Avatar sx={{ width: 24, height: 24, mr: 1 }}>
-                      🤖
-                    </Avatar>
+                <Box
+                  className={`chat-message ${message.is_user ? 'user' : 'bot'}`}
+                  sx={{
+                    maxWidth: '70%',
+                    position: 'relative',
+                    animation: `fadeInUp 0.3s ease-out ${index * 0.1}s both`,
+                  }}
+                >
+                  {!message.is_user && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                      <Avatar sx={{ width: 24, height: 24, mr: 1, bgcolor: 'primary.main' }}>
+                        <SmartToy sx={{ fontSize: 16 }} />
+                      </Avatar>
+                      <Typography variant="caption" color="textSecondary">
+                        EduMind
+                      </Typography>
+                    </Box>
+                  )}
+
+                  <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                    {message.content}
+                  </Typography>
+
+                  <Box sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    mt: 1,
+                  }}>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      {message.sentiment && (
+                        <Chip
+                          label={message.sentiment}
+                          size="small"
+                          color={getSentimentColor(message.sentiment) as any}
+                          variant="outlined"
+                        />
+                      )}
+                      {message.response_time && !message.is_user && (
+                        <Chip
+                          label={`${message.response_time.toFixed(1)}s`}
+                          size="small"
+                          variant="outlined"
+                        />
+                      )}
+                    </Box>
+
                     <Typography variant="caption" color="textSecondary">
-                      EduMind
+                      {formatTime(message.created_at)}
                     </Typography>
                   </Box>
-                )}
-
-                <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-                  {message.content}
-                </Typography>
-
-                <Box sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  mt: 1,
-                }}>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    {message.sentiment && (
-                      <Chip
-                        label={message.sentiment}
-                        size="small"
-                        color={getSentimentColor(message.sentiment) as any}
-                        variant="outlined"
-                      />
-                    )}
-                    {message.response_time && !message.is_user && (
-                      <Chip
-                        label={`${message.response_time.toFixed(1)}s`}
-                        size="small"
-                        variant="outlined"
-                      />
-                    )}
-                  </Box>
-
-                  <Typography variant="caption" color="textSecondary">
-                    {formatTime(message.created_at)}
-                  </Typography>
                 </Box>
               </Box>
-            </Box>
+            </Slide>
           ))}
 
           {/* Typing Indicator */}
-          {isTyping && (
+          <Fade in={isTyping}>
             <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
               <Box className="chat-message bot" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Avatar sx={{ width: 24, height: 24 }}>
-                  🤖
+                <Avatar sx={{ width: 24, height: 24, bgcolor: 'primary.main' }}>
+                  <SmartToy sx={{ fontSize: 16 }} />
                 </Avatar>
                 <Box className="typing-indicator">
                   <div className="typing-dot"></div>
@@ -333,67 +356,69 @@ const ChatPage: React.FC = () => {
                 </Box>
               </Box>
             </Box>
-          )}
+          </Fade>
 
           <div ref={messagesEndRef} />
         </Paper>
 
         {/* Message Input */}
-        <Paper elevation={1} sx={{ p: 2 }}>
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
-            <TextField
-              fullWidth
-              multiline
-              maxRows={4}
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type your message here... (Press Enter to send, Shift+Enter for new line)"
-              disabled={isTyping}
-              sx={{ flex: 1 }}
-            />
-
-            <IconButton
-              color={isListening ? 'error' : 'default'}
-              onClick={handleVoiceInput}
-              disabled={!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)}
-              title={isListening ? 'Stop voice input' : 'Start voice input'}
-            >
-              {isListening ? <MicOff /> : <Mic />}
-            </IconButton>
-
-            <Button
-              variant="contained"
-              onClick={handleSendMessage}
-              disabled={!newMessage.trim() || isTyping}
-              endIcon={<Send />}
-            >
-              Send
-            </Button>
-          </Box>
-
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-            <Typography variant="caption" color="textSecondary">
-              Supported: Text, Voice (click mic button)
-            </Typography>
-
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Chip
-                label={`Language: ${newSessionData.language.toUpperCase()}`}
-                size="small"
-                variant="outlined"
-                onClick={() => setShowNewSessionDialog(true)}
+        <Slide direction="up" in mountOnEnter unmountOnExit>
+          <Paper elevation={1} sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
+              <TextField
+                fullWidth
+                multiline
+                maxRows={4}
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Type your message here... (Press Enter to send, Shift+Enter for new line)"
+                disabled={isTyping || isLoading}
+                sx={{ flex: 1 }}
               />
-              {currentSession && (
-                <Chip
-                  label="Session Active"
-                  size="small"
-                  color="success"
-                />
-              )}
+
+              <IconButton
+                color={isListening ? 'error' : 'default'}
+                onClick={handleVoiceInput}
+                disabled={!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)}
+                title={isListening ? 'Stop voice input' : 'Start voice input'}
+              >
+                {isListening ? <MicOff /> : <Mic />}
+              </IconButton>
+
+              <Button
+                variant="contained"
+                onClick={handleSendMessage}
+                disabled={!newMessage.trim() || isTyping || isLoading}
+                endIcon={isLoading ? <LoadingSpinner size={16} /> : <Send />}
+              >
+                {isLoading ? 'Sending...' : 'Send'}
+              </Button>
             </Box>
-          </Box>
-        </Paper>
+
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+              <Typography variant="caption" color="textSecondary">
+                Supported: Text, Voice (click mic button)
+              </Typography>
+
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Chip
+                  label={`Language: ${newSessionData.language.toUpperCase()}`}
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setShowNewSessionDialog(true)}
+                />
+                {currentSession && (
+                  <Chip
+                    label="Session Active"
+                    size="small"
+                    color="success"
+                  />
+                )}
+              </Box>
+            </Box>
+          </Paper>
+        </Slide>
       </Box>
 
       {/* New Session Dialog */}

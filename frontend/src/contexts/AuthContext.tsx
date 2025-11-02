@@ -9,6 +9,8 @@ interface User {
   role: string;
   language_preference: string;
   learning_style: string;
+  school?: string;
+  grade_level?: string;
   is_active: boolean;
   is_verified: boolean;
 }
